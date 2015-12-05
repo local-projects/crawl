@@ -13,8 +13,9 @@ A command line script to crawl websites.
 
 ## Install
 
+*OS X*
     brew install qt
-    git clone https://github.com/local-projects/crawl
+    git clone https://github.com/local-projects/crawl.git
     cd crawl
     python setup.py install --record uninstall.txt
 
