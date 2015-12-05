@@ -1,0 +1,256 @@
+#! /usr/bin/env python
+"""
+Crawl. 
+
+Recursively crawls a given url or urls. Will loop indefinitely (by default) 
+until all links with the same base url are crawled. Links with a different base 
+url are not crawled but their HTTP status code is checked. 
+
+Usage:
+  crawl <url>... [options]
+
+Options:
+  --depth=<level>           Recursive depth to check. Must be an integer greater 
+                            than or equal to 0. 0 checks the given page, 1 checks 
+                            one page deep, etc. If not set, depth is unlimited.
+
+  --exclude=<regex>         Regular Expression that, if matched, skips the link
+                            regardless of domain. Matches against the full url, 
+                            including http scheme.
+
+  --include=<regex>         If set, domain based logic is ignored. Instead links 
+                            matching this regex will be recursively crawled. 
+                            Links not matching the regex will still have their 
+                            HTTP status code checked. Matches against the full 
+                            url, including the http scheme.
+
+  --check-images            If set, HTTP status codes for images will be pulled.
+
+  --save-images=<path>      If set, images will be downloaded and saved into the 
+                            given path. Will be saved into subdirectories 
+                            matching the downloaded image's path. Supports large 
+                            files.
+
+  --screenshot=<path>       If set, a screenshot for each page crawled will be 
+                            saved to the path specified.
+
+  --width=<int>             Used in conjunction with --screenshot. Sets the
+                            viewport width. Defaults to 1366 if not set.
+
+  --height=<int>            Used in conjunction with --screenshot. Sets the 
+                            viewport height. Defaults to the full rendered page 
+                            height if left blank.
+
+  --execute=<program>       If set, the given string specifying a shell command 
+                            will be run with the page source (after executed 
+                            by a javascript engine) used as input. Runs for each
+                            page crawled. Output is sent to stdout.
+
+  --print-status=<regex>    If set, URLs with an http status code matching the 
+                            regex will have the url printed. [default: .*]
+
+  --wait=<seconds>          Used to allow ajax feeds to load into the DOM since 
+                            I can't find a better way to detect it yet. Only 
+                            needed on ajax heavy sites. [default: 0]
+
+  --http-basic=<user:pass>  If a site is behind HTTP Basic Authentication, give 
+                            the <username> and <pass> separated by a colon.
+
+  --ignore-robots           If set, the robots.txt file will be ignored.
+
+  --version                 Show version.
+
+  -h --help                 Show this screen.
+
+Examples:
+  Crawl an entire website, printing bad links.
+      crawl http://www.localprojects.com --print-status='(?!200)'
+
+  Crawl an entire website, printing bad links while ignoring 'mailto' and 'tel' links.
+      crawl http://www.localprojects.com --print-status='(?!200)' --exclude='^(mailto|tel).*'
+
+  Crawl an entire website, printing bad links and bad images.
+      crawl http://www.localprojects.com --print-status='(?!200)' --check-images
+
+  Crawl mulitple sites.
+      crawl http://www.localprojects.com http://www.brookfieldplaceny.com
+
+  Take a screenshot of a single page using full rendered height, into the current directory.
+      crawl http://www.localprojects.com/news --depth=0 --screenshot=.
+
+  Crawl an entire website, excluding all https links
+      crawl http://www.localprojects.com --exclude='^https.*'
+
+  Crawl an entire website, ignoring all pages behind a particular path
+      crawl http://www.localprojects.com --exclude='http://www.localprojects.com/project/.*'
+
+  Crawl based on a regex instead of base url. The given url is the starting point. 
+      crawl http://www.localprojects.com --include='https?://(.*?\.)?localprojects\.(com|net).*'
+
+  Crawl an entire website, outputting the number of times "Jake Barton" is used on each page.
+      crawl http://www.localprojects.com --execute='grep -c "Jake Barton"'
+
+  Crawl an entire website, printing the post-javascript evaluated html for each page.
+      crawl http://www.localprojects.com --execute='cat'
+
+  Crawl an entire website that's behind http basic authentication.
+      crawl http://www.localprojects.com --http-basic="<username>:<password>"
+"""
+from reppy.cache import RobotsCache
+import docopt
+import dryscrape
+import requests
+import re
+import sys
+import os
+import time
+if sys.version_info[:2] < (3, 0):
+    import urlparse
+else:
+    import urllib.parse as urlparse
+
+dryscrape.start_xvfb()
+
+ARGS           = docopt.docopt(__doc__, version="0.1")
+SESSION        = dryscrape.Session()
+CHECKED_URLS   = []
+INCLUDE_REGEX  = None
+EXCLUDE_REGEX  = None
+PRINT_REGEX    = None
+DEFAULT_WIDTH  = 1366
+DEFAULT_HEIGHT = 768
+ROBOTS         = None
+
+def crawl_page(url, depth):
+    if url in CHECKED_URLS or (ROBOTS and not ROBOTS.allowed(url, "*")):
+        return
+
+    CHECKED_URLS.append(url)
+
+    if EXCLUDE_REGEX and EXCLUDE_REGEX.match(url):
+        return
+
+    try:
+        SESSION.visit(url)
+    except Exception as e:
+        print("---\t%s" % (url))
+        return
+
+    if PRINT_REGEX and PRINT_REGEX.match(str(SESSION.status_code())):
+        print("%s\t%s" % (SESSION.status_code(), url))
+
+    if not INCLUDE_REGEX.match(url):
+        return 
+
+    time.sleep(int(ARGS["--wait"])) # TODO, find better way to wait until after all network requests finish
+
+    if ARGS["--screenshot"] is not None:
+        parsed_url = urlparse.urlparse(url)
+        filename   = url.replace(parsed_url.scheme+"://", "").strip("/")
+        filename   = re.sub(r'[^a-zA-Z0-9\.]', '-', filename)
+
+        height = DEFAULT_HEIGHT
+        if not ARGS["--height"]:
+            height = int(SESSION.eval_script("document.height"))
+
+        SESSION.render("%s.jpg" % os.path.abspath(os.path.join(ARGS["--screenshot"], filename)), DEFAULT_WIDTH, height)
+
+    if ARGS["--execute"] is not None:
+        from subprocess import Popen, PIPE
+        p = Popen(filter(None, re.split('"(.+?)"| ', ARGS["--execute"])), stdout=PIPE, stdin=PIPE, stderr=PIPE)    
+        print(p.communicate(SESSION.body().encode('utf8'))[0].strip())
+
+    if ARGS["--check-images"] or ARGS["--save-images"]:
+        # TODO: Search CSS files for url("....") values and check those as well
+        for link in SESSION.xpath("//img[@src]"):
+            link = link["src"]
+            parsed_uri = urlparse.urlparse(link)
+            if not parsed_uri.netloc:
+                link = urlparse.urljoin(SESSION.base_url, link)
+            else:
+                link = parsed_uri.geturl()
+
+            r = None
+            try:
+                r = requests.head(link)
+                if ARGS["--check-images"] and PRINT_REGEX and PRINT_REGEX.match(str(r.status_code)):
+                    print("%s\t%s" % (r.status_code, link))
+            except requests.ConnectionError:
+                print("---\t%s" % link)
+
+            if ARGS["--save-images"] and r and r.status_code == 200:
+                parsed_url = urlparse.urlparse(link)
+                path = link.replace(parsed_url.scheme+"://", "").strip("/")
+                d = os.path.dirname(path)
+                if not os.path.exists(d):
+                    os.makedirs(d)
+                r = requests.get(link, stream=True)
+                with open(path, 'wb') as f:
+                    for chunk in r.iter_content(1024):
+                        f.write(chunk)
+
+    if ARGS["--depth"] is not None and depth >= ARGS["--depth"]:
+        return
+
+    links = []
+    for link in list(SESSION.xpath("//a[@href]")):
+        link = link["href"]
+
+        if link.startswith("#") or link.startswith("javascript"):
+            continue
+
+        parsed_uri = urlparse.urlparse(link)
+        if not parsed_uri.netloc:
+            link = urlparse.urljoin(SESSION.base_url, link)
+        else:
+            link = parsed_uri.geturl()
+
+        links.append(link)
+
+    for link in links:
+        crawl_page(link, depth+1)
+
+
+if __name__ == "__main__":
+    if not ARGS["--screenshot"]:
+        SESSION.set_attribute('auto_load_images', False)
+
+    if ARGS["--depth"]:
+        ARGS["--depth"] = int(ARGS["--depth"])
+
+    if ARGS["--width"] or ARGS["--height"]:
+        if ARGS["--width"]:
+            DEFAULT_WIDTH = ARGS["--width"]
+        
+        if ARGS["--height"]:
+            DEFAULT_HEIGHT = ARGS["--height"]
+    SESSION.set_viewport_size(DEFAULT_WIDTH, DEFAULT_HEIGHT)
+
+    if ARGS["--http-basic"]:
+        import base64
+        SESSION.set_header("Authorization", "Basic %s" % base64.b64encode(ARGS["--http-basic"]))
+
+    for url in ARGS["<url>"]:
+        parsed_uri = urlparse.urlparse(url)
+        if not parsed_uri.scheme and not parsed_uri.netloc:
+            url = "http://%s" % parsed_uri.path
+            parsed_uri = urlparse.urlparse(url)
+
+        SESSION.base_url = "%s://%s" % (parsed_uri.scheme, parsed_uri.netloc)
+
+        ROBOTS = None
+        if not ARGS["--ignore-robots"]:
+            ROBOTS = RobotsCache()
+            ROBOTS = ROBOTS.fetch(urlparse.urljoin(SESSION.base_url, 'robots.txt'))
+
+        INCLUDE_REGEX = re.compile("%s.*" % SESSION.base_url.replace("www.", "(www\.)?"))
+        if ARGS["--include"]:
+            INCLUDE_REGEX = re.compile(ARGS["--include"])
+
+        if ARGS["--exclude"]:
+            EXCLUDE_REGEX = re.compile(ARGS["--exclude"])
+
+        if ARGS["--print-status"]:
+            PRINT_REGEX  = re.compile(ARGS["--print-status"])
+
+        crawl_page(url, depth=0)
