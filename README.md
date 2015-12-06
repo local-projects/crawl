@@ -17,6 +17,11 @@ Recursively crawls a given url or urls. Will loop indefinitely (by default) unti
 
 If you get an error, run `xcode-select --install` and retry.
 
+**Debian based Distros (including Ubuntu)**
+
+    apt-get install qt5-default libqt5webkit5-dev libxslt1-dev xvfb
+    pip install git+https://github.com/local-projects/crawl.git
+
 ## Usage
 
     crawl <url>... [options]
@@ -54,13 +59,13 @@ If set, the given string specifying a shell command will be run with the page so
 If set, URLs with an http status code matching the regex will have the url printed. [default: .*]
 
 `--wait=<seconds>`
-Used to allow ajax feeds to load into the DOM since I can't find a better way to detect it yet. Only needed on ajax heavy sites. [default: 0]
+Used to allow ajax feeds to load into the DOM since I can't find a better way to detect it yet. Only needed on ajax heavy sites. Defaults to the site-specified crawl delay if given by the site (and robots.txt is not ignored). 0 if not. Setting this overrides any site specified delays.
 
 `--http-basic=<user:pass>`
-If a site is behind HTTP Basic Authentication, give the <username> and <pass> separated by a colon.
+If a site is behind HTTP Basic Authentication, give the username and password separated by a colon.
 
 `--ignore-robots`
-If set, the robots.txt file will be ignored.
+If set, the robots.txt file will be ignored. It is enforced by default.
 
 `--version`
 Show version.

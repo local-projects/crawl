@@ -51,12 +51,15 @@ Options:
 
   --wait=<seconds>          Used to allow ajax feeds to load into the DOM since 
                             I can't find a better way to detect it yet. Only 
-                            needed on ajax heavy sites. [default: 0]
+                            needed on ajax heavy sites. Defaults to the site-
+                            specified crawl delay if given by the site. 0 if not. 
+                            Setting this overrides any site specified delays.
 
   --http-basic=<user:pass>  If a site is behind HTTP Basic Authentication, give 
                             the <username> and <pass> separated by a colon.
 
-  --ignore-robots           If set, the robots.txt file will be ignored.
+  --ignore-robots           If set, the robots.txt file will be ignored. It is 
+                            enforced by default.
 
   --version                 Show version.
 
@@ -120,6 +123,7 @@ PRINT_REGEX    = None
 DEFAULT_WIDTH  = 1366
 DEFAULT_HEIGHT = 768
 ROBOTS         = None
+CRAWL_DELAY    = 0
 
 def crawl_page(url, depth):
     if url in CHECKED_URLS or (ROBOTS and not ROBOTS.allowed(url, "*")):
@@ -142,7 +146,8 @@ def crawl_page(url, depth):
     if not INCLUDE_REGEX.match(url):
         return 
 
-    time.sleep(int(ARGS["--wait"])) # TODO, find better way to wait until after all network requests finish
+    time.sleep(CRAWL_DELAY) 
+    # TODO, find a way to wait until after all network requests finish
 
     if ARGS["--screenshot"] is not None:
         parsed_url = urlparse.urlparse(url)
@@ -228,7 +233,7 @@ if __name__ == "__main__":
 
     if ARGS["--http-basic"]:
         import base64
-        SESSION.set_header("Authorization", "Basic %s" % base64.b64encode(ARGS["--http-basic"]))
+        SESSION.set_header("Authorization", "Basic %s" % base64.b64encode(ARGS["--http-basic"].encode('utf-8')))
 
     for url in ARGS["<url>"]:
         parsed_uri = urlparse.urlparse(url)
@@ -242,6 +247,12 @@ if __name__ == "__main__":
         if not ARGS["--ignore-robots"]:
             ROBOTS = RobotsCache()
             ROBOTS = ROBOTS.fetch(urlparse.urljoin(SESSION.base_url, 'robots.txt'))
+            site_specified_delay = ROBOTS.delay(SESSION.base_url, '*')
+            if site_specified_delay is not None:
+                CRAWL_DELAY = int(site_specified_delay)
+
+        if ARGS["--wait"] is not None:
+            CRAWL_DELAY = int(ARGS["--wait"])
 
         INCLUDE_REGEX = re.compile("%s.*" % SESSION.base_url.replace("www.", "(www\.)?"))
         if ARGS["--include"]:
