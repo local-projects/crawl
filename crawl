@@ -152,7 +152,9 @@ def crawl_page(url, depth):
     if ARGS["--screenshot"] is not None:
         parsed_url = urlparse.urlparse(url)
         filename   = url.replace(parsed_url.scheme+"://", "").strip("/")
-        filename   = re.sub(r'[^a-zA-Z0-9\.]', '-', filename)
+        d = os.path.dirname(filename)
+        if d and not os.path.exists(d):
+            os.makedirs(d)
 
         height = DEFAULT_HEIGHT
         if not ARGS["--height"]:
@@ -187,7 +189,7 @@ def crawl_page(url, depth):
                 parsed_url = urlparse.urlparse(link)
                 path = link.replace(parsed_url.scheme+"://", "").strip("/")
                 d = os.path.dirname(path)
-                if not os.path.exists(d):
+                if d and not os.path.exists(d):
                     os.makedirs(d)
                 r = requests.get(link, stream=True)
                 with open(path, 'wb') as f:
@@ -246,8 +248,8 @@ if __name__ == "__main__":
         ROBOTS = None
         if not ARGS["--ignore-robots"]:
             ROBOTS = RobotsCache()
-            ROBOTS = ROBOTS.fetch(urlparse.urljoin(SESSION.base_url, 'robots.txt'))
             site_specified_delay = ROBOTS.delay(SESSION.base_url, '*')
+            ROBOTS = ROBOTS.fetch(urlparse.urljoin(SESSION.base_url, 'robots.txt'))
             if site_specified_delay is not None:
                 CRAWL_DELAY = int(site_specified_delay)
 
