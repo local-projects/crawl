@@ -288,4 +288,5 @@ if __name__ == "__main__":
 
     if ARGS["--output-graphml"] is not None:
         filename = "-".join(ARGS["<url>"]).replace(parsed_uri.scheme+"://", "").strip("/")
+        filename = os.path.abspath(os.path.join(ARGS["--output-graphml"], filename))
         networkx.write_graphml(GRAPH, "%s.graphml.xml" % filename)

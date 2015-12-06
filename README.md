@@ -72,10 +72,10 @@ Outputs a graphml file that fully represents the crawl. If more than one url is 
 [![](https://raw.githubusercontent.com/local-projects/crawl/master/example-graph.jpg)](https://raw.githubusercontent.com/local-projects/crawl/master/example-graph.jpg)
 
 `--version`
-Show version.
+Shows version.
 
 `-h --help`
-Show this screen.
+Shows help screen.
 
 ## Examples
 
