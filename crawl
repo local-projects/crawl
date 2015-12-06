@@ -287,5 +287,5 @@ if __name__ == "__main__":
         crawl_page(url, depth=0)
 
     if ARGS["--output-graphml"] is not None:
-        filename = url.replace(parsed_uri.scheme+"://", "").strip("/")
+        filename = "-".join(ARGS["<url>"]).replace(parsed_uri.scheme+"://", "").strip("/")
         networkx.write_graphml(GRAPH, "%s.graphml.xml" % filename)
