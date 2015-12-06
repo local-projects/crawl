@@ -12,14 +12,14 @@ elif (3, 0) < version < (3, 3):
           ' ({}.{} detected).'.format(*version))
     sys.exit(-1)
 
-VERSION = '0.1'
+VERSION = '0.2'
 
-install_requires = ['dryscrape', 'docopt', 'reppy']
+install_requires = ['dryscrape', 'docopt', 'reppy', 'networkx']
 
 setup(
     name='crawl',
     version=VERSION,
-    description="A not-so-magnificent website crawler.",
+    description="A not-so-magnificent website crawler built on a Ballmer peak.",
     author='Michael Dreiling',
     author_email='michaeldreiling@localprojects.net',
     url='https://github.com/local-projects/crawl',

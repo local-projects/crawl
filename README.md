@@ -67,6 +67,10 @@ If a site is behind HTTP Basic Authentication, give the username and password se
 `--ignore-robots`
 If set, the robots.txt file will be ignored. It is enforced by default.
 
+`--output-graphml=<path>`   
+Outputs a graphml file that fully represents the crawl. If more than one url is given the graphs are combined into one, linking all sites crawled. Can then be used to create a visual representation. As an example:
+[![](https://raw.githubusercontent.com/local-projects/crawl/master/example-graph.jpg)](https://raw.githubusercontent.com/local-projects/crawl/master/example-graph.jpg)
+
 `--version`
 Show version.
 
@@ -121,7 +125,6 @@ Crawl an entire website that's behind http basic authentication.
 
 ## TODO
 
-* Graph visualization of site (a visual site map)
 * Full backup of site (downloads all html/css/js/images/video. Ie, generates a static version of the site)
 * Multiple threads with user-specified amount (defaulting to 1)
 * Better ajax loading detection (can currently just wait a set time per page)

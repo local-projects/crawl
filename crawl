@@ -61,6 +61,10 @@ Options:
   --ignore-robots           If set, the robots.txt file will be ignored. It is 
                             enforced by default.
 
+  --output-graphml=<path>   Outputs a graphml file that fully represents the 
+                            crawl. If more than one url is given the graphs are 
+                            combined into one, linking all sites crawled.
+
   --version                 Show version.
 
   -h --help                 Show this screen.
@@ -114,7 +118,7 @@ else:
 
 dryscrape.start_xvfb()
 
-ARGS           = docopt.docopt(__doc__, version="0.1")
+ARGS           = docopt.docopt(__doc__, version="0.2")
 SESSION        = dryscrape.Session()
 CHECKED_URLS   = []
 INCLUDE_REGEX  = None
@@ -124,24 +128,34 @@ DEFAULT_WIDTH  = 1366
 DEFAULT_HEIGHT = 768
 ROBOTS         = None
 CRAWL_DELAY    = 0
+GRAPH          = None
 
-def crawl_page(url, depth):
-    if url in CHECKED_URLS or (ROBOTS and not ROBOTS.allowed(url, "*")):
+def crawl_page(url, depth, parent=None):
+    if EXCLUDE_REGEX and EXCLUDE_REGEX.match(url):
+        return
+
+    if ROBOTS and not ROBOTS.allowed(url, "*"):
+        return
+
+    if ARGS["--output-graphml"] is not None and parent is not None:
+        GRAPH.add_edge(parent, url)
+
+    if url in CHECKED_URLS:
         return
 
     CHECKED_URLS.append(url)
 
-    if EXCLUDE_REGEX and EXCLUDE_REGEX.match(url):
-        return
-
     try:
         SESSION.visit(url)
+
+        if PRINT_REGEX and PRINT_REGEX.match(str(SESSION.status_code())):
+            print("%s\t%s" % (SESSION.status_code(), url))
     except Exception as e:
         print("---\t%s" % (url))
         return
 
-    if PRINT_REGEX and PRINT_REGEX.match(str(SESSION.status_code())):
-        print("%s\t%s" % (SESSION.status_code(), url))
+    if ARGS["--output-graphml"] is not None and parent is not None:
+        GRAPH[parent][url]['status'] = SESSION.status_code()
 
     if not INCLUDE_REGEX.match(url):
         return 
@@ -182,7 +196,7 @@ def crawl_page(url, depth):
                 r = requests.head(link)
                 if ARGS["--check-images"] and PRINT_REGEX and PRINT_REGEX.match(str(r.status_code)):
                     print("%s\t%s" % (r.status_code, link))
-            except requests.ConnectionError:
+            except Exception as e:
                 print("---\t%s" % link)
 
             if ARGS["--save-images"] and r and r.status_code == 200:
@@ -201,9 +215,9 @@ def crawl_page(url, depth):
 
     links = []
     for link in list(SESSION.xpath("//a[@href]")):
-        link = link["href"]
+        link = link["href"].strip("#")
 
-        if link.startswith("#") or link.startswith("javascript"):
+        if not link or link.startswith("#") or link.startswith("javascript"):
             continue
 
         parsed_uri = urlparse.urlparse(link)
@@ -215,7 +229,7 @@ def crawl_page(url, depth):
         links.append(link)
 
     for link in links:
-        crawl_page(link, depth+1)
+        crawl_page(link, depth+1, url)
 
 
 if __name__ == "__main__":
@@ -237,6 +251,10 @@ if __name__ == "__main__":
         import base64
         SESSION.set_header("Authorization", "Basic %s" % base64.b64encode(ARGS["--http-basic"].encode('utf-8')))
 
+    if ARGS["--output-graphml"] is not None:
+        import networkx
+        GRAPH = networkx.Graph()
+
     for url in ARGS["<url>"]:
         parsed_uri = urlparse.urlparse(url)
         if not parsed_uri.scheme and not parsed_uri.netloc:
@@ -257,13 +275,17 @@ if __name__ == "__main__":
             CRAWL_DELAY = int(ARGS["--wait"])
 
         INCLUDE_REGEX = re.compile("%s.*" % SESSION.base_url.replace("www.", "(www\.)?"))
-        if ARGS["--include"]:
+        if ARGS["--include"] is not None:
             INCLUDE_REGEX = re.compile(ARGS["--include"])
 
-        if ARGS["--exclude"]:
+        if ARGS["--exclude"] is not None:
             EXCLUDE_REGEX = re.compile(ARGS["--exclude"])
 
-        if ARGS["--print-status"]:
-            PRINT_REGEX  = re.compile(ARGS["--print-status"])
+        if ARGS["--print-status"] is not None:
+            PRINT_REGEX = re.compile(ARGS["--print-status"])
 
         crawl_page(url, depth=0)
+
+    if ARGS["--output-graphml"] is not None:
+        filename = url.replace(parsed_uri.scheme+"://", "").strip("/")
+        networkx.write_graphml(GRAPH, "%s.graphml.xml" % filename)
